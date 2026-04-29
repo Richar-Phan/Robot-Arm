@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robot Arm Controller</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap');
+:root {
+  --bg:#0a0c10; --panel:#111418; --border:#1e2530;
+  --accent:#00e5ff; --accent2:#ff6b35;
+  --green:#39ff14; --red:#ff1744;
+  --yellow:#ffd600; --purple:#b388ff;
+  --text:#c8d0dc; --dim:#4a5568;
+  --glow:0 0 12px rgba(0,229,255,0.4);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.012) 2px,rgba(0,229,255,0.012) 4px);pointer-events:none;z-index:0;}
+.container{width:100%;max-width:720px;position:relative;z-index:1;}
+
+header{text-align:center;padding:20px 0 14px;border-bottom:1px solid var(--border);margin-bottom:18px;}
+header h1{font-family:'Share Tech Mono',monospace;font-size:1.5rem;color:var(--accent);text-shadow:var(--glow);letter-spacing:3px;}
+header p{font-size:0.8rem;color:var(--dim);letter-spacing:2px;margin-top:4px;}
+
+.panel{background:var(--panel);border:1px solid var(--border);padding:18px;margin-bottom:14px;position:relative;}
+.panel::before{content:attr(data-label);position:absolute;top:-10px;left:14px;background:var(--panel);padding:0 8px;font-family:'Share Tech Mono',monospace;font-size:0.68rem;color:var(--accent);letter-spacing:2px;text-transform:uppercase;}
+
+/* Status */
+.status-bar{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--border);padding:8px 14px;margin-bottom:14px;font-family:'Share Tech Mono',monospace;font-size:0.78rem;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red);transition:all .3s;flex-shrink:0;}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
+#bleBtn{margin-left:auto;padding:6px 14px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:0.72rem;cursor:pointer;letter-spacing:1px;transition:all .15s;}
+#bleBtn:hover{background:var(--accent);color:var(--bg);}
+#bleBtn:disabled{border-color:var(--dim);color:var(--dim);cursor:not-allowed;}
+
+/* Buttons */
+.btn{padding:13px 24px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:0.95rem;letter-spacing:2px;cursor:pointer;transition:all .15s;user-select:none;-webkit-user-select:none;}
+.btn:active,.btn.active{background:var(--accent);color:var(--bg);box-shadow:var(--glow);}
+.btn-stop{border-color:var(--accent2);color:var(--accent2);}
+.btn-stop:active{background:var(--accent2);color:var(--bg);}
+.btn-sm{padding:7px 14px;font-size:0.78rem;letter-spacing:1px;}
+.btn-dim{border-color:var(--dim);color:var(--dim);}
+.btn-dim:hover{border-color:var(--text);color:var(--text);}
+.btn-green{border-color:var(--green);color:var(--green);}
+.btn-green:active,.btn-green.active{background:var(--green);color:var(--bg);}
+.btn-red{border-color:var(--red);color:var(--red);}
+.btn-red:active{background:var(--red);color:var(--bg);}
+.btn-yellow{border-color:var(--yellow);color:var(--yellow);}
+.btn-yellow:active,.btn-yellow.active{background:var(--yellow);color:var(--bg);}
+
+.base-controls{display:flex;gap:10px;justify-content:center;align-items:center;}
+
+/* Slider rows */
+.servo-row{display:grid;grid-template-columns:110px 1fr 52px;align-items:center;gap:10px;margin-bottom:12px;}
+.servo-label{font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:var(--dim);letter-spacing:1px;}
+.servo-label span{display:block;color:var(--text);font-size:0.9rem;font-family:'Rajdhani',sans-serif;font-weight:700;}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--border);outline:none;border-radius:0;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;background:var(--accent);border-radius:0;cursor:pointer;box-shadow:0 0 7px var(--accent);}
+.val{font-family:'Share Tech Mono',monospace;font-size:0.95rem;color:var(--accent);text-align:right;}
+
+/* Waypoint list */
+.wp-list{max-height:220px;overflow-y:auto;margin-bottom:10px;}
+.wp-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);margin-bottom:5px;font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:var(--dim);transition:border-color .2s;}
+.wp-item.active-wp{border-color:var(--yellow);color:var(--yellow);}
+.wp-item .wp-name{flex:1;color:var(--text);}
+.wp-item .wp-angles{color:var(--dim);font-size:0.65rem;}
+.wp-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+
+/* Playback bar */
+.play-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+.speed-row{display:grid;grid-template-columns:100px 1fr 52px;align-items:center;gap:10px;margin-top:8px;}
+
+/* Arm vis */
+.arm-vis{display:flex;justify-content:center;padding:10px 0 4px;}
+svg.arm{width:240px;height:165px;}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hint{font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:var(--dim);text-align:center;margin-top:5px;}
+
+@media(max-width:480px){.grid2{grid-template-columns:1fr;}.btn{padding:12px 16px;font-size:0.85rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>&#9881; ROBOT ARM</h1>
+  <p>ESP32-S3 &nbsp;&#183;&nbsp; BLE &nbsp;&#183;&nbsp; 6 SERVO</p>
+</header>
+
+<!-- BLE Status -->
+<div class="status-bar">
+  <div class="dot" id="dot"></div>
+  <span id="statusText">DISCONNECTED</span>
+  <button id="bleBtn" onclick="connectBLE()">&#9655; CONNECT BLE</button>
+</div>
+
+<!-- BASE -->
+<div class="panel" data-label="SERVO 0 — BASE 360°">
+  <div class="base-controls">
+    <button class="btn" id="btnL" onmousedown="baseCmd(-1)" onmouseup="baseCmd(0)" ontouchstart="ev(event,-1)" ontouchend="ev(event,0)">&#9664; TRAI</button>
+    <button class="btn btn-stop" onclick="baseCmd(0)">STOP</button>
+    <button class="btn" id="btnR" onmousedown="baseCmd(1)" onmouseup="baseCmd(0)" ontouchstart="ev(event,1)" ontouchend="ev(event,0)">PHAI &#9654;</button>
+  </div>
+</div>
+
+<!-- SERVO 1-5 -->
+<div class="panel" data-label="SERVO 1–5 — 180°">
+  <div id="servoRows"></div>
+</div>
+
+<!-- TRIM -->
+<div class="panel" data-label="BASE TRIM">
+  <div class="servo-row">
+    <div class="servo-label">STOP TRIM<span>Neutral</span></div>
+    <input type="range" min="-30" max="30" value="0" id="trimSlider" oninput="onTrim(this.value)">
+    <div class="val" id="trimVal">0</div>
+  </div>
+  <div class="hint">Servo van quay khi tha? Chinh trim cho den khi dung han</div>
+</div>
+
+<!-- ARM VIS -->
+<div class="panel" data-label="ARM VISUALIZER">
+  <div class="arm-vis">
+    <svg class="arm" viewBox="0 0 260 165">
+      <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0L0 0 0 20" fill="none" stroke="#1e2530" stroke-width="0.5"/></pattern></defs>
+      <rect width="260" height="165" fill="url(#g)"/>
+      <rect x="95" y="142" width="70" height="12" fill="#1e2530" stroke="#00e5ff" stroke-width="1"/>
+      <text x="130" y="157" text-anchor="middle" font-family="Share Tech Mono" font-size="8" fill="#4a5568">BASE 360</text>
+      <line id="s0" x1="130" y1="135" x2="130" y2="98" stroke="#00e5ff" stroke-width="4" stroke-linecap="round"/>
+      <line id="s1" x1="130" y1="98" x2="130" y2="68" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
+      <line id="s2" x1="130" y1="68" x2="130" y2="45" stroke="#ff6b35" stroke-width="3" stroke-linecap="round"/>
+      <line id="s3" x1="130" y1="45" x2="130" y2="28" stroke="#ff6b35" stroke-width="2" stroke-linecap="round"/>
+      <line id="gL" x1="130" y1="28" x2="118" y2="16" stroke="#39ff14" stroke-width="2" stroke-linecap="round"/>
+      <line id="gR" x1="130" y1="28" x2="142" y2="16" stroke="#39ff14" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="130" cy="135" r="5" fill="#00e5ff" opacity="0.9"/>
+      <circle id="j0" cx="130" cy="98" r="4" fill="#00e5ff" opacity="0.8"/>
+      <circle id="j1" cx="130" cy="68" r="4" fill="#ff6b35" opacity="0.8"/>
+      <circle id="j2" cx="130" cy="45" r="3" fill="#ff6b35" opacity="0.8"/>
+      <circle id="j3" cx="130" cy="28" r="3" fill="#39ff14" opacity="0.8"/>
+    </svg>
+  </div>
+</div>
+
+<!-- WAYPOINT RECORDER -->
+<div class="panel" data-label="MOTION RECORDER — WAYPOINTS">
+  <div class="wp-list" id="wpList">
+    <div style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:0.72rem;text-align:center;padding:16px;">
+      Chua co waypoint nao. Dieu chinh vi tri roi an "LUU DIEM".
+    </div>
+  </div>
+  <div class="wp-actions">
+    <button class="btn btn-sm btn-green" onclick="saveWaypoint()">&#43; LUU DIEM</button>
+    <button class="btn btn-sm btn-dim" onclick="clearWaypoints()">&#128465; XOA TAT CA</button>
+    <button class="btn btn-sm btn-dim" onclick="exportWaypoints()">&#8659; EXPORT</button>
+    <button class="btn btn-sm btn-dim" onclick="importWaypoints()">&#8657; IMPORT</button>
+  </div>
+  <div class="speed-row" style="margin-top:12px;">
+    <div class="servo-label">TOC DO<span>Playback</span></div>
+    <input type="range" min="5" max="100" value="30" id="speedSlider" oninput="document.getElementById('speedVal').textContent=this.value">
+    <div class="val" id="speedVal">30</div>
+  </div>
+  <div class="hint">ms/buoc — nho = nhanh, lon = cham</div>
+  <div class="play-bar">
+    <button class="btn btn-sm btn-yellow" id="btnPlay" onclick="playAll()">&#9654; PHAT TAT CA</button>
+    <button class="btn btn-sm btn-yellow" onclick="playLoop()" id="btnLoop">&#8635; LOOP</button>
+    <button class="btn btn-sm btn-red" onclick="stopPlay()">&#9632; DUNG</button>
+    <span id="playStatus" style="font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:var(--dim);margin-left:4px;"></span>
+  </div>
+</div>
+
+<!-- SYSTEM -->
+<div class="panel" data-label="SYSTEM">
+  <div class="grid2">
+    <button class="btn btn-sm btn-dim" onclick="sendReset()">&#8635; RESET HOME</button>
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:var(--dim)">BASE: <span id="baseInd" style="color:var(--accent)">STOP</span></div>
+  </div>
+</div>
+
+</div><!-- /container -->
+<input type="file" id="importFile" accept=".json" style="display:none" onchange="doImport(event)">
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  BLE CONFIG
+// ═══════════════════════════════════════════════════════════
+const SVC_UUID  = '12345678-1234-1234-1234-123456789abc';
+const TX_UUID   = '12345678-1234-1234-1234-123456789ab1'; // notify
+const RX_UUID   = '12345678-1234-1234-1234-123456789ab2'; // write
+
+let bleDevice, bleServer, charTX, charRX;
+let connected = false;
+
+async function connectBLE() {
+  try {
+    document.getElementById('bleBtn').disabled = true;
+    document.getElementById('statusText').textContent = 'SCANNING...';
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'RobotArm-ESP32' }],
+      optionalServices: [SVC_UUID]
+    });
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+    bleServer = await bleDevice.gatt.connect();
+    const svc = await bleServer.getPrimaryService(SVC_UUID);
+    charTX = await svc.getCharacteristic(TX_UUID);
+    charRX = await svc.getCharacteristic(RX_UUID);
+    await charTX.startNotifications();
+    charTX.addEventListener('characteristicvaluechanged', onNotify);
+    setConnected(true);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('statusText').textContent = 'ERROR: ' + e.message;
+    document.getElementById('bleBtn').disabled = false;
+  }
+}
+
+function setConnected(v) {
+  connected = v;
+  document.getElementById('dot').className = 'dot' + (v ? ' on' : '');
+  document.getElementById('statusText').textContent = v ? 'CONNECTED — ' + (bleDevice?.name || '') : 'DISCONNECTED';
+  document.getElementById('bleBtn').textContent = v ? '&#9632; DISCONNECT' : '&#9655; CONNECT BLE';
+  document.getElementById('bleBtn').disabled = false;
+  document.getElementById('bleBtn').onclick = v ? disconnectBLE : connectBLE;
+}
+
+async function disconnectBLE() {
+  if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+}
+
+function onDisconnected() {
+  setConnected(false);
+  stopPlay();
+}
+
+function onNotify(e) {
+  try {
+    const txt = new TextDecoder().decode(e.target.value);
+    const d = JSON.parse(txt);
+    if (d.type === 'state' && d.angles) {
+      d.angles.forEach((v,i) => {
+        angles[i] = v;
+        const sl = document.getElementById('sl'+i);
+        const av = document.getElementById('av'+i);
+        if(sl) sl.value = v;
+        if(av) av.textContent = v;
+      });
+      updateVis();
+    }
+  } catch(e) {}
+}
+
+async function sendBLE(obj) {
+  if (!connected || !charRX) return;
+  try {
+    const enc = new TextEncoder().encode(JSON.stringify(obj));
+    await charRX.writeValueWithoutResponse(enc);
+  } catch(e) { console.warn('BLE write:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SERVO CONTROL
+// ═══════════════════════════════════════════════════════════
+const SERVOS = [
+  {label:'SHOULDER', name:'Khop vai',   ch:1},
+  {label:'ELBOW',    name:'Khop khuyu', ch:2},
+  {label:'WRIST P',  name:'Co tay P',   ch:3},
+  {label:'WRIST R',  name:'Co tay R',   ch:4},
+  {label:'GRIPPER',  name:'Kep',        ch:5},
+];
+let angles = [90,90,90,90,90];
+
+const rc = document.getElementById('servoRows');
+SERVOS.forEach((s,i) => {
+  rc.innerHTML += `<div class="servo-row">
+    <div class="servo-label">${s.label}<span>${s.name}</span></div>
+    <input type="range" min="0" max="180" value="90" id="sl${i}" oninput="onSlider(${i},this.value)">
+    <div class="val" id="av${i}">90</div>
+  </div>`;
+});
+
+function onSlider(i, v) {
+  v = parseInt(v);
+  angles[i] = v;
+  document.getElementById('av'+i).textContent = v;
+  sendBLE({cmd:'servo', ch:SERVOS[i].ch, angle:v});
+  updateVis();
+}
+
+function onTrim(v) {
+  v = parseInt(v);
+  document.getElementById('trimVal').textContent = v;
+  sendBLE({cmd:'trim', val:v});
+}
+
+function ev(e, dir) { e.preventDefault(); baseCmd(dir); }
+
+function baseCmd(dir) {
+  sendBLE({cmd:'base', dir:dir});
+  const lb = {'-1':'TRAI','0':'STOP','1':'PHAI'};
+  document.getElementById('baseInd').textContent = lb[dir]||'STOP';
+  document.getElementById('btnL').classList.toggle('active', dir===-1);
+  document.getElementById('btnR').classList.toggle('active', dir===1);
+}
+
+function sendReset() {
+  sendBLE({cmd:'reset'});
+  angles = [90,90,90,90,90];
+  SERVOS.forEach((_,i) => {
+    document.getElementById('sl'+i).value = 90;
+    document.getElementById('av'+i).textContent = 90;
+  });
+  document.getElementById('trimSlider').value = 0;
+  document.getElementById('trimVal').textContent = 0;
+  document.getElementById('baseInd').textContent = 'STOP';
+  document.getElementById('btnL').classList.remove('active');
+  document.getElementById('btnR').classList.remove('active');
+  updateVis();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WAYPOINT SYSTEM
+// ═══════════════════════════════════════════════════════════
+let waypoints = JSON.parse(localStorage.getItem('robot_waypoints') || '[]');
+let playInterval = null;
+let looping = false;
+let currentWP = -1;
+
+function saveWP() { localStorage.setItem('robot_waypoints', JSON.stringify(waypoints)); }
+
+function saveWaypoint() {
+  const name = 'WP-' + String(waypoints.length+1).padStart(2,'0');
+  waypoints.push({ name, angles: [...angles] });
+  saveWP();
+  renderWP();
+}
+
+function deleteWaypoint(i) {
+  waypoints.splice(i, 1);
+  saveWP();
+  renderWP();
+}
+
+function moveWP(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= waypoints.length) return;
+  [waypoints[i], waypoints[j]] = [waypoints[j], waypoints[i]];
+  saveWP();
+  renderWP();
+}
+
+function gotoWP(i) {
+  const wp = waypoints[i];
+  if (!wp) return;
+  const speed = parseInt(document.getElementById('speedSlider').value);
+  sendBLE({cmd:'play', angles: wp.angles, speed});
+  wp.angles.forEach((v,idx) => {
+    angles[idx] = v;
+    document.getElementById('sl'+idx).value = v;
+    document.getElementById('av'+idx).textContent = v;
+  });
+  updateVis();
+  highlightWP(i);
+}
+
+function highlightWP(i) {
+  document.querySelectorAll('.wp-item').forEach((el,idx) => {
+    el.classList.toggle('active-wp', idx === i);
+  });
+  currentWP = i;
+}
+
+function renderWP() {
+  const list = document.getElementById('wpList');
+  if (waypoints.length === 0) {
+    list.innerHTML = '<div style="color:var(--dim);font-family:\'Share Tech Mono\',monospace;font-size:0.72rem;text-align:center;padding:16px;">Chua co waypoint. Dieu chinh vi tri roi an "+ LUU DIEM".</div>';
+    return;
+  }
+  list.innerHTML = waypoints.map((wp,i) => `
+    <div class="wp-item" id="wpi${i}">
+      <span style="color:var(--dim);font-size:0.65rem;">${String(i+1).padStart(2,'0')}</span>
+      <span class="wp-name">${wp.name}</span>
+      <span class="wp-angles">[${wp.angles.join(',')}]</span>
+      <button class="btn btn-sm" style="padding:3px 8px;font-size:0.65rem;" onclick="gotoWP(${i})">GO</button>
+      <button class="btn btn-sm btn-dim" style="padding:3px 6px;font-size:0.65rem;" onclick="moveWP(${i},-1)">▲</button>
+      <button class="btn btn-sm btn-dim" style="padding:3px 6px;font-size:0.65rem;" onclick="moveWP(${i},1)">▼</button>
+      <button class="btn btn-sm btn-red" style="padding:3px 8px;font-size:0.65rem;" onclick="deleteWaypoint(${i})">✕</button>
+    </div>`).join('');
+}
+
+async function playAll() {
+  if (!connected) { alert('Chua ket noi BLE!'); return; }
+  if (waypoints.length === 0) { alert('Chua co waypoint!'); return; }
+  stopPlay();
+  looping = false;
+  document.getElementById('btnLoop').classList.remove('active');
+  await runSequence();
+}
+
+async function playLoop() {
+  if (!connected) { alert('Chua ket noi BLE!'); return; }
+  if (waypoints.length === 0) { alert('Chua co waypoint!'); return; }
+  stopPlay();
+  looping = true;
+  document.getElementById('btnLoop').classList.add('active');
+  await runSequence();
+}
+
+let playing = false;
+async function runSequence() {
+  playing = true;
+  const speed = parseInt(document.getElementById('speedSlider').value);
+  do {
+    for (let i = 0; i < waypoints.length && playing; i++) {
+      document.getElementById('playStatus').textContent = `WP ${i+1}/${waypoints.length}`;
+      highlightWP(i);
+      const wp = waypoints[i];
+      sendBLE({cmd:'play', angles: wp.angles, speed});
+      wp.angles.forEach((v,idx) => {
+        angles[idx] = v;
+        document.getElementById('sl'+idx).value = v;
+        document.getElementById('av'+idx).textContent = v;
+      });
+      updateVis();
+      // Chờ thời gian di chuyển ước tính
+      const maxDelta = Math.max(...wp.angles.map((v,idx) => Math.abs(v - (idx===0?angles[0]:angles[idx]))));
+      const waitMs = Math.max(maxDelta * speed + 200, 500);
+      await sleep(waitMs);
+    }
+  } while (looping && playing);
+  if (playing) {
+    document.getElementById('playStatus').textContent = 'DONE';
+    playing = false;
+    looping = false;
+    document.getElementById('btnLoop').classList.remove('active');
+  }
+}
+
+function stopPlay() {
+  playing = false;
+  looping = false;
+  document.getElementById('btnLoop').classList.remove('active');
+  document.getElementById('playStatus').textContent = '';
+  document.querySelectorAll('.wp-item').forEach(el => el.classList.remove('active-wp'));
+  currentWP = -1;
+}
+
+function clearWaypoints() {
+  if (!confirm('Xoa tat ca waypoint?')) return;
+  waypoints = [];
+  saveWP();
+  renderWP();
+}
+
+function exportWaypoints() {
+  const data = JSON.stringify(waypoints, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'robot_waypoints.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importWaypoints() { document.getElementById('importFile').click(); }
+
+function doImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (Array.isArray(data)) { waypoints = data; saveWP(); renderWP(); }
+    } catch(e) { alert('File khong hop le!'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ═══════════════════════════════════════════════════════════
+//  ARM VISUALIZER
+// ═══════════════════════════════════════════════════════════
+function updateVis() {
+  const BX=130,BY=135,L=[37,30,22,17,11];
+  const a = angles.map((v,i)=>-(v-90)*(Math.PI/180));
+  let x=BX,y=BY,c=-Math.PI/2;
+  const J=[{x,y}];
+  for(let i=0;i<4;i++){c+=a[i];x+=Math.cos(c)*L[i];y+=Math.sin(c)*L[i];J.push({x,y});}
+  const go=((180-angles[4])/180)*0.38+0.05;
+  const gx1=J[4].x+Math.cos(c-Math.PI/2+go)*L[4],gy1=J[4].y+Math.sin(c-Math.PI/2+go)*L[4];
+  const gx2=J[4].x+Math.cos(c-Math.PI/2-go)*L[4],gy2=J[4].y+Math.sin(c-Math.PI/2-go)*L[4];
+  const sl=(id,x1,y1,x2,y2)=>{const e=document.getElementById(id);if(e){e.setAttribute('x1',x1.toFixed(1));e.setAttribute('y1',y1.toFixed(1));e.setAttribute('x2',x2.toFixed(1));e.setAttribute('y2',y2.toFixed(1));}};
+  const sc=(id,cx,cy)=>{const e=document.getElementById(id);if(e){e.setAttribute('cx',cx.toFixed(1));e.setAttribute('cy',cy.toFixed(1));}};
+  sl('s0',J[0].x,J[0].y,J[1].x,J[1].y);
+  sl('s1',J[1].x,J[1].y,J[2].x,J[2].y);
+  sl('s2',J[2].x,J[2].y,J[3].x,J[3].y);
+  sl('s3',J[3].x,J[3].y,J[4].x,J[4].y);
+  sl('gL',J[4].x,J[4].y,gx1,gy1);
+  sl('gR',J[4].x,J[4].y,gx2,gy2);
+  sc('j0',J[1].x,J[1].y);sc('j1',J[2].x,J[2].y);
+  sc('j2',J[3].x,J[3].y);sc('j3',J[4].x,J[4].y);
+}
+
+renderWP();
+updateVis();
+</script>
+</body>
+</html>
